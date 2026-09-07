@@ -116,4 +116,62 @@ export default function Home() {
         </Campo>
 
         <Campo label="¿Tiene acceso a red eléctrica?">
-          <select value={form.tiene_acceso_red} onChange={(e) => actualizar('tiene_acceso_red', e.target.value)}
+          <select value={form.tiene_acceso_red} onChange={(e) => actualizar('tiene_acceso_red', e.target.value)} style={estilos.input}>
+            <option value="si">Sí</option>
+            <option value="no">No</option>
+          </select>
+        </Campo>
+
+        <Campo label="¿Tiene cortes de luz frecuentes?">
+          <select value={form.cortes_frecuentes} onChange={(e) => actualizar('cortes_frecuentes', e.target.value)} style={estilos.input}>
+            <option value="no">No</option>
+            <option value="si">Sí</option>
+          </select>
+        </Campo>
+
+        <Campo label="¿Quiere respaldo con batería ante cortes?">
+          <select value={form.quiere_respaldo_bateria} onChange={(e) => actualizar('quiere_respaldo_bateria', e.target.value)} style={estilos.input}>
+            <option value="no">No</option>
+            <option value="si">Sí</option>
+          </select>
+        </Campo>
+
+        <button type="submit" disabled={estado === 'enviando'} style={estilos.boton}>
+          {estado === 'enviando' ? 'Enviando...' : 'Enviar'}
+        </button>
+
+        {estado === 'ok' && <p style={{ color: 'green' }}>¡Datos guardados correctamente!</p>}
+        {estado === 'error' && <p style={{ color: 'red' }}>Ocurrió un error, intenta de nuevo.</p>}
+      </form>
+    </div>
+  );
+}
+
+function Campo({ label, children }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', color: '#2C2C2C', fontWeight: 'bold', fontSize: '14px' }}>
+      {label}
+      {children}
+    </label>
+  );
+}
+
+const estilos = {
+  input: {
+    padding: '10px',
+    borderRadius: '6px',
+    border: '1px solid #ccc',
+    fontSize: '15px',
+  },
+  boton: {
+    marginTop: '10px',
+    padding: '12px',
+    backgroundColor: '#E8622C',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '16px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+  },
+};
