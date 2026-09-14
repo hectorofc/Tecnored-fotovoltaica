@@ -7,29 +7,31 @@ export async function POST(request) {
   try {
     await sql`
       INSERT INTO factibilidad (
-        nombre, telefono, comuna, quien_completa, nombre_vendedor,
-        tipo_techo, orientacion_techo, m2_disponibles, tiene_sombra,
-        consumo_mensual_kwh, monto_mensual_pago, tiene_acceso_red,
-        cortes_frecuentes, quiere_respaldo_bateria
+        direccion, tipo_techo, m2_disponibles,
+        consumo_mensual_kwh, monto_mensual_pago, respaldo_baterias, tipo_instalacion,
+        ideal_kw, plan_elegido_kw, sub_opcion_elegida, paneles_cantidad,
+        quiere_cotizar, nombre_contacto, telefono_contacto, correo_contacto
       ) VALUES (
-        ${data.nombre},
-        ${data.telefono},
-        ${data.comuna},
-        ${data.quien_completa},
-        ${data.nombre_vendedor || null},
+        ${data.direccion},
         ${data.tipo_techo},
-        ${data.orientacion_techo},
-        ${data.m2_disponibles},
-        ${data.tiene_sombra === 'si'},
-        ${data.consumo_mensual_kwh},
-        ${data.monto_mensual_pago},
-        ${data.tiene_acceso_red === 'si'},
-        ${data.cortes_frecuentes === 'si'},
-        ${data.quiere_respaldo_bateria === 'si'}
+        ${data.m2_disponibles || null},
+        ${data.consumo_mensual_kwh || null},
+        ${data.monto_mensual_pago || null},
+        ${data.respaldo_baterias},
+        ${data.tipo_instalacion},
+        ${data.ideal_kw || null},
+        ${data.plan_elegido_kw || null},
+        ${data.sub_opcion_elegida || null},
+        ${data.paneles_cantidad || null},
+        ${data.quiere_cotizar || false},
+        ${data.nombre_contacto || null},
+        ${data.telefono_contacto || null},
+        ${data.correo_contacto || null}
       )
     `;
     return NextResponse.json({ ok: true });
   } catch (error) {
+    console.error(error);
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 }
