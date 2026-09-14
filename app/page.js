@@ -36,7 +36,7 @@ function panelesPara(tierKW, key) {
 export default function Home() {
   const [screen, setScreen] = useState(0);
   const [form, setForm] = useState({
-    direccion: '', techo: 'teja', m2: '',
+    direccion: '', techo: 'teja_asfaltica', m2: '',
     consumo: '', pago: '', respaldo: 'no', instalacion: 'coplanar',
   });
   const [idealKW, setIdealKW] = useState(0);
@@ -143,12 +143,12 @@ export default function Home() {
             <div className="row2">
               <div className="field">
                 <label>Tipo de techo</label>
-                <select value={form.techo} onChange={(e) => upd('techo', e.target.value)}>
-                  <option value="teja">Teja</option>
-                  <option value="zinc">Zinc / metálico</option>
-                  <option value="losa">Losa</option>
-                  <option value="terreno">Terreno / piso</option>
-                </select>
+              <select value={form.techo} onChange={(e) => upd('techo', e.target.value)}>
+  <option value="teja_asfaltica">Teja Asfáltica</option>
+  <option value="metalica_zinc">Metálica / Zinc</option>
+  <option value="teja_colonia_hormigon">Teja colonia / Hormigón</option>
+  <option value="piso">Instalar en piso</option>
+</select>
               </div>
               <div className="field">
                 <label>m² disponibles</label>
