@@ -30,7 +30,10 @@ function getOpciones(idealKW) {
 }
  
 function panelesPara(tierKW, key) {
-  return Math.round((tierKW * 1000 * RATIOS[key]) / PANEL_W);
+  const equilibrio = Math.round((tierKW * 1000 * RATIOS.equilibrio) / PANEL_W);
+  if (key === 'lowcost') return equilibrio - 2;
+  if (key === 'retorno') return equilibrio + 2;
+  return equilibrio;
 }
  
 export default function Home() {
