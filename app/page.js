@@ -40,7 +40,7 @@ export default function Home() {
   const [screen, setScreen] = useState(0);
   const [form, setForm] = useState({
     direccion: '', techo: 'teja_asfaltica', m2: '',
-    consumo: '', pago: '', respaldo: 'no', instalacion: 'coplanar',
+    consumo: '', pago: '', sistema: 'ongrid', instalacion: 'coplanar',
   });
   const [idealKW, setIdealKW] = useState(0);
   const [opciones, setOpciones] = useState(null);
@@ -57,7 +57,9 @@ export default function Home() {
  
   function avanzarAPropuestas() {
     const ideal = calcIdealKW(parseFloat(form.consumo) || 0);
-    const ops = getOpciones(ideal);
+    const ops = form.sistema === 'offgrid'
+      ? { tipo: 'unica', ideal: 6.2 }
+      : getOpciones(ideal);
     setIdealKW(ideal);
     setOpciones(ops);
     setScreen(ops.tipo === 'contactar' ? 'contactarGrande' : 2);
@@ -75,7 +77,8 @@ export default function Home() {
           m2_disponibles: form.m2,
           consumo_mensual_kwh: form.consumo,
           monto_mensual_pago: form.pago,
-          respaldo_baterias: form.respaldo === 'si',
+          respaldo_baterias: form.sistema !== 'ongrid',
+          tipo_sistema: form.sistema,
           tipo_instalacion: form.instalacion,
           ideal_kw: idealKW || null,
           plan_elegido_kw: planElegido,
@@ -146,12 +149,12 @@ export default function Home() {
             <div className="row2">
               <div className="field">
                 <label>Tipo de techo</label>
-              <select value={form.techo} onChange={(e) => upd('techo', e.target.value)}>
-  <option value="teja_asfaltica">Teja Asfáltica</option>
-  <option value="metalica_zinc">Metálica / Zinc</option>
-  <option value="teja_colonia_hormigon">Teja colonia / Hormigón</option>
-  <option value="piso">Instalar en piso</option>
-</select>
+                <select value={form.techo} onChange={(e) => upd('techo', e.target.value)}>
+                  <option value="metalica_zinc">Metálica / Zinc</option>
+                  <option value="teja_asfaltica">Teja Asfáltica</option>
+                  <option value="teja_colonia_hormigon">Teja colonia / Hormigón</option>
+                  <option value="piso">Instalar en piso</option>
+                </select>
               </div>
               <div className="field">
                 <label>m² disponibles</label>
@@ -182,19 +185,22 @@ export default function Home() {
             </div>
             <div className="row2">
               <div className="field">
-                <label>¿Quieres respaldo con baterías?</label>
-                <select value={form.respaldo} onChange={(e) => upd('respaldo', e.target.value)}>
-                  <option value="no">No</option>
-                  <option value="si">Sí</option>
+                <label>¿Almacenamiento de energía?</label>
+                <select value={form.sistema} onChange={(e) => upd('sistema', e.target.value)}>
+                  <option value="ongrid">Sin almacenamiento (OnGrid)</option>
+                  <option value="hibrido">Con almacenamiento (Híbrido)</option>
+                  <option value="offgrid">Solo con baterías, sin red (OffGrid)</option>
                 </select>
               </div>
-              <div className="field">
-                <label>Tipo de instalación</label>
-                <select value={form.instalacion} onChange={(e) => upd('instalacion', e.target.value)}>
-                  <option value="coplanar">Coplanar (sobre el techo)</option>
-                  <option value="inclinada">Con inclinación (estructura elevada)</option>
-                </select>
-              </div>
+              {form.techo === 'metalica_zinc' && (
+                <div className="field">
+                  <label>Ángulo variable</label>
+                  <select value={form.instalacion} onChange={(e) => upd('instalacion', e.target.value)}>
+                    <option value="coplanar">Coplanar (sobre el techo)</option>
+                    <option value="inclinada">Con ángulo variable (estructura elevada)</option>
+                  </select>
+                </div>
+              )}
             </div>
             <div className="actions">
               <button className="btn btn-ghost" onClick={() => setScreen(0)}>Volver</button>
@@ -211,8 +217,11 @@ export default function Home() {
  
             <div className={opciones.tipo === 'unica' ? 'options' : 'options-grid'}>
               {opciones.tipo === 'unica' && (
-                <OptCard kw={opciones.ideal} tag="Planta recomendada"
-                  desc="Tu consumo es acotado — este es el tamaño más eficiente en costo para tu caso."
+                <OptCard kw={opciones.ideal}
+                  tag={form.sistema === 'offgrid' ? 'Kit OffGrid' : 'Planta recomendada'}
+                  desc={form.sistema === 'offgrid'
+                    ? 'Sistema autónomo con baterías, sin conexión a la red eléctrica.'
+                    : 'Tu consumo es acotado — este es el tamaño más eficiente en costo para tu caso.'}
                   cov={coberturaPct(opciones.ideal, form.consumo)}
                   onClick={() => { setPlanElegido(opciones.ideal); setScreen(3); }} />
               )}
@@ -287,10 +296,10 @@ export default function Home() {
  
             <div className="materials">
               <div className="m-row"><span>Panel solar monocristalino 590W</span><span className="qty">{panelesPara(planElegido, subElegida)} un.</span></div>
-              <div className="m-row"><span>Inversor {planElegido} kW</span><span className="qty">1 un.</span></div>
-              <div className="m-row"><span>Estructura de montaje {form.instalacion === 'coplanar' ? 'coplanar' : 'con inclinación'} (kit por panel)</span><span className="qty">{panelesPara(planElegido, subElegida)} kits</span></div>
+              <div className="m-row"><span>Inversor {form.sistema === 'offgrid' ? 'OffGrid' : form.sistema === 'hibrido' ? 'híbrido' : 'OnGrid'} {planElegido} kW</span><span className="qty">1 un.</span></div>
+              <div className="m-row"><span>Estructura de montaje {form.instalacion === 'coplanar' ? 'coplanar' : 'con ángulo variable'} (kit por panel)</span><span className="qty">{panelesPara(planElegido, subElegida)} kits</span></div>
               <div className="m-row"><span>Cableado DC/AC y protecciones</span><span className="qty">1 kit</span></div>
-              {form.respaldo === 'si' && <div className="m-row"><span>Banco de baterías de respaldo</span><span className="qty">A definir</span></div>}
+              {form.sistema !== 'ongrid' && <div className="m-row"><span>Banco de baterías</span><span className="qty">A definir</span></div>}
               <div className="m-note">* Cantidades referenciales — se ajustarán con el catálogo real y el stock disponible de Tecnored.</div>
             </div>
  
