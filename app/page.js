@@ -4,9 +4,84 @@ import { useState } from 'react';
  
 const HSP = 4.5;
 const PERD = 0.8;
-const PANEL_W = 590;
+const PANEL_W = 580;
 const TIERS = [3, 5, 8];
 const RATIOS = { lowcost: 0.85, equilibrio: 1.05, retorno: 1.2 };
+ 
+const ANCHO_PANEL = 1.134, ORILLA = 0.15;
+const LARGOS_RIEL = [5.2, 4.2, 3.4, 2.1];
+const SKU_RIEL = { 5.2: '4703156', 4.2: '4703063', 3.4: '4703062', 2.1: '4703061' };
+const SKU_UNION_RIEL = '4703064';
+const SKU_UNION_PANELES = '4703220';
+const SKU_UNION_ULTIMO = '4703219';
+const SKU_PLETINA = '7406584';
+const SKU_TIERRA = '4703070';
+const SKU_PANEL = '4707132';
+const INVERSORES = {
+  3: { sku: '4701022', nombre: 'Inversor Ongrid Huawei Monofásico 3kW' },
+  5: { sku: '4701023', nombre: 'Inversor Ongrid Huawei Monofásico 5kW' },
+  8: { sku: '4701024', nombre: 'Inversor Hibrido Huawei Monofásico 8kW' },
+  6.2: { sku: null, nombre: 'Inversor OffGrid 6,2kW' },
+};
+ 
+function sujecionInfo(techo, instalacion) {
+  if (techo === 'metalica_zinc' && instalacion === 'inclinada') {
+    return { tipo: 'doble', skuA: '4703071', nombreA: 'Base ajustable tipo L', skuB: '4703072', nombreB: 'Soporte ajustable 15-30°' };
+  }
+  if (techo === 'metalica_zinc') return { tipo: 'simple', sku: '4703068', nombre: 'Conector tipo L a techo' };
+  if (techo === 'teja_colonia_hormigon') return { tipo: 'simple', sku: '4703067', nombre: 'Conector a costanera' };
+  if (techo === 'teja_asfaltica') return { tipo: 'pendiente', nombre: 'Sujeción para teja asfáltica (SKU por definir)' };
+  return { tipo: 'pendiente', nombre: 'Sujeción para instalación en piso (por definir)' };
+}
+ 
+function repartirPaneles(paneles, strings) {
+  const base = Math.floor(paneles / strings), resto = paneles % strings;
+  return Array.from({ length: strings }, (_, i) => base + (i < resto ? 1 : 0)).filter((n) => n > 0);
+}
+ 
+function combinarRiel(metros) {
+  let mejor = null;
+  const buscar = (restante, idx, actual, piezas) => {
+    if (restante <= 0.001) {
+      const sobrante = -restante;
+      if (!mejor || piezas < mejor.piezas || (piezas === mejor.piezas && sobrante < mejor.sobrante)) {
+        mejor = { combo: { ...actual }, piezas, sobrante };
+      }
+      return;
+    }
+    if (idx >= LARGOS_RIEL.length || piezas > 12) return;
+    const largo = LARGOS_RIEL[idx];
+    const maxUso = Math.ceil(restante / largo);
+    for (let k = maxUso; k >= 0; k--) {
+      if (k > 0) actual[largo] = (actual[largo] || 0) + k;
+      buscar(restante - k * largo, idx + 1, actual, piezas + k);
+      if (k > 0) { actual[largo] -= k; if (actual[largo] === 0) delete actual[largo]; }
+    }
+  };
+  buscar(metros, 0, {}, 0);
+  return mejor;
+}
+ 
+function calcularEstructura(totalPaneles, strings) {
+  const reparto = repartirPaneles(totalPaneles, strings);
+  let mt_riel_total = 0, sujecion = 0, union_paneles = 0, union_ultimo = 0, pletina = 0, tierra = 0, uniones_riel = 0;
+  const rieles = {};
+  const detallePorString = [];
+  reparto.forEach((n) => {
+    const largoTramo = ANCHO_PANEL * n + ORILLA * 2;
+    mt_riel_total += largoTramo * 2;
+    const c = combinarRiel(largoTramo);
+    Object.entries(c.combo).forEach(([largo, cant]) => { rieles[largo] = (rieles[largo] || 0) + cant * 2; });
+    uniones_riel += Math.max(0, c.piezas - 1) * 2;
+    detallePorString.push({ paneles: n, largoTramo: +largoTramo.toFixed(2), combo: c.combo, sobrante: +c.sobrante.toFixed(2) });
+    sujecion += n * 2;
+    union_paneles += (n - 1) * 2;
+    union_ultimo += 4;
+    pletina += n - 1;
+    tierra += 1;
+  });
+  return { reparto, mt_riel_total: +mt_riel_total.toFixed(2), rieles, uniones_riel, sujecion, union_paneles, union_ultimo, pletina, tierra, detallePorString };
+}
  
 function calcIdealKW(consumoMensual) {
   const diario = consumoMensual / 30;
@@ -39,13 +114,17 @@ function panelesPara(tierKW, key) {
 export default function Home() {
   const [screen, setScreen] = useState(0);
   const [form, setForm] = useState({
-    direccion: '', techo: 'teja_asfaltica', m2: '',
+    direccion: '', techo: '', m2: '',
     consumo: '', pago: '', sistema: 'ongrid', instalacion: 'coplanar',
   });
+  const [error1, setError1] = useState(false);
+  const [error2, setError2] = useState(false);
   const [idealKW, setIdealKW] = useState(0);
   const [opciones, setOpciones] = useState(null);
   const [planElegido, setPlanElegido] = useState(null);
   const [subElegida, setSubElegida] = useState(null);
+  const [stringsConocido, setStringsConocido] = useState('no');
+  const [stringsCantidad, setStringsCantidad] = useState(2);
   const [contacto, setContacto] = useState({ nombre: '', telefono: '', correo: '' });
   const [descargado, setDescargado] = useState(false);
   const [cotizado, setCotizado] = useState(false);
@@ -55,11 +134,19 @@ export default function Home() {
     setForm((prev) => ({ ...prev, [campo]: valor }));
   }
  
+  function continuarPaso1() {
+    if (!form.techo) { setError1(true); return; }
+    setError1(false);
+    setScreen(1);
+  }
+ 
   function avanzarAPropuestas() {
-    const ideal = calcIdealKW(parseFloat(form.consumo) || 0);
-    const ops = form.sistema === 'offgrid'
-      ? { tipo: 'unica', ideal: 6.2 }
-      : getOpciones(ideal);
+    const consumoNum = parseFloat(form.consumo);
+    const pagoNum = parseFloat(form.pago);
+    if (!form.consumo || consumoNum <= 0 || !form.pago || pagoNum <= 0) { setError2(true); return; }
+    setError2(false);
+    const ideal = calcIdealKW(consumoNum);
+    const ops = form.sistema === 'offgrid' ? { tipo: 'unica', ideal: 6.2 } : getOpciones(ideal);
     setIdealKW(ideal);
     setOpciones(ops);
     setScreen(ops.tipo === 'contactar' ? 'contactarGrande' : 2);
@@ -67,6 +154,7 @@ export default function Home() {
  
   async function guardar(payloadExtra) {
     setEnviando(true);
+    const est = planElegido && subElegida ? calcularEstructura(panelesPara(planElegido, subElegida), stringsCantidad) : null;
     try {
       await fetch('/api/factibilidad', {
         method: 'POST',
@@ -74,16 +162,17 @@ export default function Home() {
         body: JSON.stringify({
           direccion: form.direccion,
           tipo_techo: form.techo,
-          m2_disponibles: form.m2,
+          m2_disponibles: form.m2 || null,
           consumo_mensual_kwh: form.consumo,
           monto_mensual_pago: form.pago,
-          respaldo_baterias: form.sistema !== 'ongrid',
           tipo_sistema: form.sistema,
+          respaldo_baterias: form.sistema !== 'ongrid',
           tipo_instalacion: form.instalacion,
           ideal_kw: idealKW || null,
           plan_elegido_kw: planElegido,
           sub_opcion_elegida: subElegida,
           paneles_cantidad: planElegido && subElegida ? panelesPara(planElegido, subElegida) : null,
+          strings_cantidad: est ? stringsCantidad : null,
           nombre_contacto: contacto.nombre,
           telefono_contacto: contacto.telefono,
           correo_contacto: contacto.correo,
@@ -97,22 +186,11 @@ export default function Home() {
     setEnviando(false);
   }
  
-  async function onDescargar() {
-    await guardar({});
-    setDescargado(true);
-  }
+  async function onDescargar() { await guardar({}); setDescargado(true); }
+  async function onCotizar() { await guardar({ quiere_cotizar: true }); setCotizado(true); }
+  async function onSolicitarContactoGrande() { await guardar({ quiere_cotizar: true }); setCotizado(true); }
  
-  async function onCotizar() {
-    await guardar({ quiere_cotizar: true });
-    setCotizado(true);
-  }
- 
-  async function onSolicitarContactoGrande() {
-    await guardar({ quiere_cotizar: true });
-    setCotizado(true);
-  }
- 
-  const stepIndex = typeof screen === 'number' ? screen : 4;
+  const stepIndex = typeof screen === 'number' ? Math.min(screen, 4) : 4;
  
   return (
     <div className="app">
@@ -127,9 +205,7 @@ export default function Home() {
       </header>
  
       <div className="stepper">
-        {[0, 1, 2, 3, 4].map((i) => (
-          <div key={i} className={`step ${i <= stepIndex ? 'done' : ''}`}></div>
-        ))}
+        {[0, 1, 2, 3, 4].map((i) => (<div key={i} className={`step ${i <= stepIndex ? 'done' : ''}`}></div>))}
       </div>
       <div className="steplabels">
         <span>General</span><span>Técnico</span><span>Tamaño</span><span>Configuración</span><span>Resultado</span>
@@ -150,6 +226,7 @@ export default function Home() {
               <div className="field">
                 <label>Tipo de techo</label>
                 <select value={form.techo} onChange={(e) => upd('techo', e.target.value)}>
+                  <option value="" disabled>Escoja el tipo de techo</option>
                   <option value="metalica_zinc">Metálica / Zinc</option>
                   <option value="teja_asfaltica">Teja Asfáltica</option>
                   <option value="teja_colonia_hormigon">Teja colonia / Hormigón</option>
@@ -162,8 +239,9 @@ export default function Home() {
               </div>
             </div>
             <div className="actions">
-              <button className="btn btn-primary" onClick={() => setScreen(1)}>Continuar</button>
+              <button className="btn btn-primary" onClick={continuarPaso1}>Continuar</button>
             </div>
+            {error1 && <div style={{ color: '#C94E1E', fontSize: '13.5px', marginTop: '10px' }}>Escoge el tipo de techo para continuar.</div>}
           </>
         )}
  
@@ -206,6 +284,7 @@ export default function Home() {
               <button className="btn btn-ghost" onClick={() => setScreen(0)}>Volver</button>
               <button className="btn btn-primary" onClick={avanzarAPropuestas}>Ver propuestas</button>
             </div>
+            {error2 && <div style={{ color: '#C94E1E', fontSize: '13.5px', marginTop: '10px' }}>Completa el consumo y el monto mensual para continuar.</div>}
           </>
         )}
  
@@ -219,9 +298,7 @@ export default function Home() {
               {opciones.tipo === 'unica' && (
                 <OptCard kw={opciones.ideal}
                   tag={form.sistema === 'offgrid' ? 'Kit OffGrid' : 'Planta recomendada'}
-                  desc={form.sistema === 'offgrid'
-                    ? 'Sistema autónomo con baterías, sin conexión a la red eléctrica.'
-                    : 'Tu consumo es acotado — este es el tamaño más eficiente en costo para tu caso.'}
+                  desc={form.sistema === 'offgrid' ? 'Sistema autónomo con baterías, sin conexión a la red eléctrica.' : 'Tu consumo es acotado — este es el tamaño más eficiente en costo para tu caso.'}
                   cov={coberturaPct(opciones.ideal, form.consumo)}
                   onClick={() => { setPlanElegido(opciones.ideal); setScreen(3); }} />
               )}
@@ -280,52 +357,42 @@ export default function Home() {
           </>
         )}
  
-        {screen === 4 && planElegido && subElegida && (
+        {screen === 4 && (
           <>
-            <div className="eyebrow">Resultado</div>
-            <h1 className="title">Tu <em>listado de materiales</em></h1>
-            <p className="lead">
-              Planta de {planElegido} kW, configuración "{subElegida === 'lowcost' ? 'low cost' : subElegida === 'equilibrio' ? 'el equilibrio' : 'mejor retorno'}".
-            </p>
+            <div className="eyebrow">Antes del resultado final</div>
+            <h1 className="title">¿Sabes cuántos <em>strings</em> vas a usar?</h1>
+            <p className="lead">Un string es cada grupo de paneles conectados en serie a una misma entrada del inversor. Esto nos permite calcular bien la cantidad de riel y conectores.</p>
  
-            <div className="summary-strip">
-              <div><div className="num">{planElegido} kW</div><div className="lbl">Tamaño de planta</div></div>
-              <div><div className="num">{panelesPara(planElegido, subElegida)}</div><div className="lbl">Paneles 590W</div></div>
-              <div><div className="num">{coberturaPct(planElegido, form.consumo)}%</div><div className="lbl">Cobertura consumo</div></div>
+            <StringDiagram />
+ 
+            <div className="field">
+              <label>¿Lo sabes?</label>
+              <select value={stringsConocido} onChange={(e) => setStringsConocido(e.target.value)}>
+                <option value="no">No lo sé — usar 2 strings (recomendado)</option>
+                <option value="si">Sí, lo sé</option>
+              </select>
             </div>
- 
-            <div className="materials">
-              <div className="m-row"><span>Panel solar monocristalino 590W</span><span className="qty">{panelesPara(planElegido, subElegida)} un.</span></div>
-              <div className="m-row"><span>Inversor {form.sistema === 'offgrid' ? 'OffGrid' : form.sistema === 'hibrido' ? 'híbrido' : 'OnGrid'} {planElegido} kW</span><span className="qty">1 un.</span></div>
-              <div className="m-row"><span>Estructura de montaje {form.instalacion === 'coplanar' ? 'coplanar' : 'con ángulo variable'} (kit por panel)</span><span className="qty">{panelesPara(planElegido, subElegida)} kits</span></div>
-              <div className="m-row"><span>Cableado DC/AC y protecciones</span><span className="qty">1 kit</span></div>
-              {form.sistema !== 'ongrid' && <div className="m-row"><span>Banco de baterías</span><span className="qty">A definir</span></div>}
-              <div className="m-note">* Cantidades referenciales — se ajustarán con el catálogo real y el stock disponible de Tecnored.</div>
-            </div>
- 
-            <hr className="divider" />
- 
-            {!descargado && (
-              <div>
-                <h3 style={{ margin: '0 0 4px', fontSize: '16px' }}>Para descargar tu listado</h3>
-                <p style={{ color: 'var(--slate)', fontSize: '13.5px', margin: '0 0 14px' }}>Déjanos tus datos y te lo enviamos, además de dejarte en contacto con nuestro equipo.</p>
-                <div className="field"><label>Nombre</label><input value={contacto.nombre} onChange={(e) => setContacto({ ...contacto, nombre: e.target.value })} placeholder="Tu nombre" /></div>
-                <div className="row2">
-                  <div className="field"><label>Teléfono</label><input value={contacto.telefono} onChange={(e) => setContacto({ ...contacto, telefono: e.target.value })} placeholder="+56 9 ..." /></div>
-                  <div className="field"><label>Correo</label><input type="email" value={contacto.correo} onChange={(e) => setContacto({ ...contacto, correo: e.target.value })} placeholder="tu@correo.cl" /></div>
-                </div>
-                <button className="btn btn-primary" disabled={enviando} onClick={onDescargar}>{enviando ? 'Guardando...' : 'Descargar listado'}</button>
+            {stringsConocido === 'si' && (
+              <div className="field">
+                <label>Cantidad de strings</label>
+                <input type="number" min="1" value={stringsCantidad} onChange={(e) => setStringsCantidad(parseInt(e.target.value) || 1)} />
               </div>
             )}
-            {descargado && <div className="success">Listo — tu listado quedó registrado. Nuestro equipo también quedó notificado.</div>}
  
-            <button className="btn btn-cta" disabled={enviando} onClick={onCotizar}>Quiero cotizar ahora — que me llamen</button>
-            {cotizado && <div className="success">¡Perfecto! Un ejecutivo Tecnored te va a llamar a la brevedad con precios.</div>}
- 
-            <div className="actions" style={{ marginTop: '18px' }}>
+            <div className="actions">
               <button className="btn btn-ghost" onClick={() => setScreen(3)}>Volver</button>
+              <button className="btn btn-primary" onClick={() => { if (stringsConocido === 'no') setStringsCantidad(2); setScreen(5); }}>Ver listado final</button>
             </div>
           </>
+        )}
+ 
+        {screen === 5 && planElegido && subElegida && (
+          <Resultado
+            kw={planElegido} subElegida={subElegida} form={form} idealKW={idealKW}
+            stringsCantidad={stringsCantidad} contacto={contacto} setContacto={setContacto}
+            descargado={descargado} cotizado={cotizado} enviando={enviando}
+            onDescargar={onDescargar} onCotizar={onCotizar} onVolver={() => setScreen(4)}
+          />
         )}
  
         {screen === 'contactarGrande' && (
@@ -365,6 +432,136 @@ function OptCard({ kw, tag, desc, cov, onClick }) {
       <div className="opt-desc">{desc}</div>
       <div className={`badge ${covClass}`}>Cubre ~{cov}% de tu consumo actual</div>
     </div>
+  );
+}
+ 
+function StringDiagram() {
+  const rows = [0, 1];
+  return (
+    <svg viewBox="0 0 520 210" style={{ width: '100%', maxWidth: '480px', display: 'block', margin: '0 0 22px' }}>
+      {rows.map((row) => {
+        const y = 15 + row * 95;
+        const midY = y + 23;
+        return (
+          <g key={row}>
+            {[10, 90, 170, 250].map((x) => (
+              <g key={x}>
+                <rect x={x} y={y} width="70" height="46" rx="4" fill="#fff" stroke="#2B2B2E" strokeWidth="2" />
+                <line x1={x + 10} y1={y + 10} x2={x + 60} y2={y + 10} stroke="#E4E0D8" strokeWidth="1.5" />
+                <line x1={x + 10} y1={y + 23} x2={x + 60} y2={y + 23} stroke="#E4E0D8" strokeWidth="1.5" />
+                <line x1={x + 10} y1={y + 36} x2={x + 60} y2={y + 36} stroke="#E4E0D8" strokeWidth="1.5" />
+              </g>
+            ))}
+            <line x1="45" y1={midY} x2="405" y2={midY} stroke="#E8622C" strokeWidth="3" />
+            <circle cx="45" cy={midY} r="4" fill="#E8622C" />
+            <circle cx="125" cy={midY} r="4" fill="#E8622C" />
+            <circle cx="205" cy={midY} r="4" fill="#E8622C" />
+            <circle cx="285" cy={midY} r="4" fill="#E8622C" />
+            <text x="10" y={y - 6} fontFamily="Space Grotesk, sans-serif" fontWeight="700" fontSize="12.5" fill="#E8622C">String {row + 1}</text>
+          </g>
+        );
+      })}
+      <rect x="405" y="45" width="90" height="90" rx="6" fill="#2B2B2E" />
+      <text x="450" y="95" textAnchor="middle" fontFamily="Space Grotesk, sans-serif" fontWeight="700" fontSize="12" fill="#FFC72C">Inversor</text>
+      <text x="160" y="200" textAnchor="middle" fontFamily="Inter, sans-serif" fontWeight="600" fontSize="13" fill="#2B2B2E">Cada fila es un string — paneles conectados en serie</text>
+    </svg>
+  );
+}
+ 
+function Resultado({ kw, subElegida, form, stringsCantidad, contacto, setContacto, descargado, cotizado, enviando, onDescargar, onCotizar, onVolver }) {
+  const paneles = panelesPara(kw, subElegida);
+  const est = calcularEstructura(paneles, stringsCantidad);
+  const suj = sujecionInfo(form.techo, form.instalacion);
+  const inv = INVERSORES[kw];
+ 
+  const rielRows = Object.entries(est.rieles).sort((a, b) => b[0] - a[0]).map(([largo, cant]) => (
+    <div className="m-row" key={largo}><span>Riel Aluminio 35mm {Math.round(largo * 1000)}mm <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {SKU_RIEL[largo]})</span></span><span className="qty">{cant} un.</span></div>
+  ));
+ 
+  let sujecionRows;
+  if (suj.tipo === 'doble') {
+    sujecionRows = (
+      <>
+        <div className="m-row"><span>{suj.nombreA} <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {suj.skuA})</span></span><span className="qty">{Math.round(est.sujecion / 2)} un.</span></div>
+        <div className="m-row"><span>{suj.nombreB} <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {suj.skuB})</span></span><span className="qty">{Math.round(est.sujecion / 2)} un.</span></div>
+      </>
+    );
+  } else if (suj.tipo === 'simple') {
+    sujecionRows = <div className="m-row"><span>{suj.nombre} <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {suj.sku})</span></span><span className="qty">{est.sujecion} un.</span></div>;
+  } else {
+    sujecionRows = <div className="m-row"><span>{suj.nombre}</span><span className="qty">{est.sujecion} un.</span></div>;
+  }
+ 
+  return (
+    <>
+      <div className="eyebrow">Resultado</div>
+      <h1 className="title">Tu <em>listado de materiales</em></h1>
+      <p className="lead">
+        Planta de {kw} kW, configuración "{subElegida === 'lowcost' ? 'low cost' : subElegida === 'equilibrio' ? 'el equilibrio' : 'mejor retorno'}", {stringsCantidad} string{stringsCantidad > 1 ? 's' : ''} ({est.reparto.join(' + ')} paneles).
+      </p>
+ 
+      <div className="summary-strip">
+        <div><div className="num">{kw} kW</div><div className="lbl">Tamaño de planta</div></div>
+        <div><div className="num">{paneles}</div><div className="lbl">Paneles 580W</div></div>
+        <div><div className="num">{coberturaPct(kw, form.consumo)}%</div><div className="lbl">Cobertura consumo</div></div>
+      </div>
+ 
+      <div className="materials">
+        <div className="m-cat">Paneles</div>
+        <div className="m-row"><span>Panel ZN Shine 580W <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {SKU_PANEL})</span></span><span className="qty">{paneles} un.</span></div>
+ 
+        <div className="m-cat">Inversores</div>
+        <div className="m-row"><span>{inv.nombre}{inv.sku ? <span style={{ color: 'var(--slate)', fontWeight: 400 }}> (SKU {inv.sku})</span> : <span style={{ color: 'var(--slate)', fontWeight: 400 }}> (SKU pendiente de definir)</span>}</span><span className="qty">1 un.</span></div>
+ 
+        {form.sistema !== 'ongrid' && (
+          <>
+            <div className="m-cat">Almacenamiento</div>
+            <div className="m-row"><span>Banco de baterías</span><span className="qty">A definir</span></div>
+          </>
+        )}
+ 
+        <div className="m-cat">Estructura</div>
+        <div className="m-note" style={{ paddingTop: 0 }}>Propuesta de riel por string (cada string lleva 2 rieles iguales):</div>
+        {est.detallePorString.map((d, i) => (
+          <div className="m-row" style={{ fontSize: '13.5px' }} key={i}>
+            <span>String {i + 1} — {d.paneles} paneles ({d.largoTramo}mt por riel)</span>
+            <span className="qty" style={{ textAlign: 'right' }}>{Object.entries(d.combo).sort((a, b) => b[0] - a[0]).map(([l, c]) => `${c}× ${l}m`).join(' + ')}</span>
+          </div>
+        ))}
+        <div className="m-note">Total a comprar ({est.mt_riel_total} mt en riel):</div>
+        {rielRows}
+        {est.uniones_riel > 0 && <div className="m-row"><span>Unión riel de aluminio <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {SKU_UNION_RIEL})</span></span><span className="qty">{est.uniones_riel} un.</span></div>}
+        {sujecionRows}
+        <div className="m-row"><span>Conector unión módulo 30mm <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {SKU_UNION_PANELES})</span></span><span className="qty">{est.union_paneles} un.</span></div>
+        <div className="m-row"><span>Conector terminal módulo 30mm <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {SKU_UNION_ULTIMO})</span></span><span className="qty">{est.union_ultimo} un.</span></div>
+        <div className="m-row"><span>Pletina dentada bajada a tierra <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {SKU_PLETINA})</span></span><span className="qty">{est.pletina} un.</span></div>
+        <div className="m-row"><span>Conector a tierra estructura solar <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {SKU_TIERRA})</span></span><span className="qty">{est.tierra} un.</span></div>
+        <div className="m-note">* La combinación de rieles es una propuesta — revisa el stock de todas las dimensiones antes de confirmar. Cantidades sujetas al catálogo real de Tecnored.</div>
+      </div>
+ 
+      <hr className="divider" />
+ 
+      {!descargado && (
+        <div>
+          <h3 style={{ margin: '0 0 4px', fontSize: '16px' }}>Para descargar tu listado</h3>
+          <p style={{ color: 'var(--slate)', fontSize: '13.5px', margin: '0 0 14px' }}>Déjanos tus datos y te lo enviamos, además de dejarte en contacto con nuestro equipo.</p>
+          <div className="field"><label>Nombre</label><input value={contacto.nombre} onChange={(e) => setContacto({ ...contacto, nombre: e.target.value })} placeholder="Tu nombre" /></div>
+          <div className="row2">
+            <div className="field"><label>Teléfono</label><input value={contacto.telefono} onChange={(e) => setContacto({ ...contacto, telefono: e.target.value })} placeholder="+56 9 ..." /></div>
+            <div className="field"><label>Correo</label><input type="email" value={contacto.correo} onChange={(e) => setContacto({ ...contacto, correo: e.target.value })} placeholder="tu@correo.cl" /></div>
+          </div>
+          <button className="btn btn-primary" disabled={enviando} onClick={onDescargar}>{enviando ? 'Guardando...' : 'Descargar listado'}</button>
+        </div>
+      )}
+      {descargado && <div className="success">Listo — tu listado quedó registrado. Nuestro equipo también quedó notificado.</div>}
+ 
+      <button className="btn btn-cta" disabled={enviando} onClick={onCotizar}>Quiero cotizar ahora — que me llamen</button>
+      {cotizado && <div className="success">¡Perfecto! Un ejecutivo Tecnored te va a llamar a la brevedad con precios.</div>}
+ 
+      <div className="actions" style={{ marginTop: '18px' }}>
+        <button className="btn btn-ghost" onClick={onVolver}>Volver</button>
+      </div>
+    </>
   );
 }
  
@@ -429,6 +626,7 @@ p.lead{color:var(--slate); font-size:15px; line-height:1.5; margin:0 0 26px; max
 .badge.cov-high{background:#E7F2E9; color:var(--good);}
 .badge.cov-mid{background:#FFF3DC; color:#8a6413;}
 .materials{background:var(--card); border:1.5px solid var(--line); border-radius:12px; overflow:hidden; margin-bottom:22px;}
+.m-cat{padding:12px 18px 6px; font-weight:700; font-size:12.5px; color:var(--ember); background:#FAF8F4;}
 .m-row{display:flex; justify-content:space-between; padding:13px 18px; border-bottom:1px solid var(--line); font-size:14.5px;}
 .m-row:last-child{border-bottom:none;}
 .m-row .qty{color:var(--slate); font-weight:600;}
