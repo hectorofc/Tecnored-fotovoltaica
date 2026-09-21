@@ -8,8 +8,8 @@ export async function POST(request) {
     await sql`
       INSERT INTO factibilidad (
         direccion, tipo_techo, m2_disponibles,
-        consumo_mensual_kwh, monto_mensual_pago, respaldo_baterias, tipo_sistema, tipo_instalacion,
-        ideal_kw, plan_elegido_kw, sub_opcion_elegida, paneles_cantidad,
+        consumo_mensual_kwh, monto_mensual_pago, tipo_sistema, respaldo_baterias, tipo_instalacion,
+        ideal_kw, plan_elegido_kw, sub_opcion_elegida, paneles_cantidad, strings_cantidad,
         quiere_cotizar, nombre_contacto, telefono_contacto, correo_contacto
       ) VALUES (
         ${data.direccion},
@@ -17,13 +17,14 @@ export async function POST(request) {
         ${data.m2_disponibles || null},
         ${data.consumo_mensual_kwh || null},
         ${data.monto_mensual_pago || null},
+        ${data.tipo_sistema},
         ${data.respaldo_baterias},
-        ${data.tipo_sistema || null},
-        ${data.tipo_instalacion},
+        ${data.tipo_instalacion || null},
         ${data.ideal_kw || null},
         ${data.plan_elegido_kw || null},
         ${data.sub_opcion_elegida || null},
         ${data.paneles_cantidad || null},
+        ${data.strings_cantidad || null},
         ${data.quiere_cotizar || false},
         ${data.nombre_contacto || null},
         ${data.telefono_contacto || null},
