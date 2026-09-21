@@ -1,6 +1,7 @@
 'use client';
- 
+
 import { useState } from 'react';
+import jsPDF from 'jspdf';
  
 const HSP = 4.5;
 const PERD = 0.8;
@@ -467,12 +468,68 @@ function StringDiagram() {
     </svg>
   );
 }
+function generarPDF({ kw, subElegida, form, est, paneles, contacto }) {
+  const doc = new jsPDF();
+  let y = 20;
+  doc.setFontSize(16);
+  doc.text('Tecnored Solar', 14, y); y += 8;
+  doc.setFontSize(11);
+  doc.text('Listado de materiales', 14, y); y += 10;
+  doc.setFontSize(9);
+  doc.text(`Cliente: ${contacto.nombre}  |  Tel: ${contacto.telefono}  |  Correo: ${contacto.correo}`, 14, y); y += 6;
+  doc.text(`Dirección: ${form.direccion || '-'}`, 14, y); y += 10;
+  doc.setFontSize(11);
+  doc.text(`Planta ${kw} kW — Configuración: ${subElegida}`, 14, y); y += 8;
+
+  const addLine = (text) => { doc.setFontSize(10); doc.text(text, 14, y); y += 6; if (y > 280) { doc.addPage(); y = 20; } };
+  const addCat = (text) => { y += 2; doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.text(text, 14, y); doc.setFont(undefined, 'normal'); y += 7; };
+
+  addCat('Paneles');
+  addLine(`Panel ZN Shine 580W (SKU ${SKU_PANEL}) — ${paneles} un.`);
+
+  addCat('Inversores');
+  const inv = INVERSORES[kw];
+  addLine(`${inv.nombre}${inv.sku ? ' (SKU ' + inv.sku + ')' : ' (SKU pendiente)'} — 1 un.`);
+
+  if (form.sistema !== 'ongrid') {
+    addCat('Almacenamiento');
+    addLine('Banco de baterías — A definir');
+  }
+
+  addCat('Estructura');
+  Object.entries(est.rieles).sort((a, b) => b[0] - a[0]).forEach(([largo, cant]) => {
+    addLine(`Riel Aluminio 35mm ${Math.round(largo * 1000)}mm (SKU ${SKU_RIEL[largo]}) — ${cant} un.`);
+  });
+  if (est.uniones_riel > 0) addLine(`Unión riel (SKU ${SKU_UNION_RIEL}) — ${est.uniones_riel} un.`);
+  const suj = sujecionInfo(form.techo, form.instalacion);
+  if (suj.tipo === 'doble') {
+    addLine(`${suj.nombreA} (SKU ${suj.skuA}) — ${Math.round(est.sujecion / 2)} un.`);
+    addLine(`${suj.nombreB} (SKU ${suj.skuB}) — ${Math.round(est.sujecion / 2)} un.`);
+  } else if (suj.tipo === 'simple') {
+    addLine(`${suj.nombre} (SKU ${suj.sku}) — ${est.sujecion} un.`);
+  } else {
+    addLine(`${suj.nombre} — ${est.sujecion} un.`);
+  }
+  addLine(`Conector unión módulo (SKU ${SKU_UNION_PANELES}) — ${est.union_paneles} un.`);
+  addLine(`Conector terminal módulo (SKU ${SKU_UNION_ULTIMO}) — ${est.union_ultimo} un.`);
+  addLine(`Pletina dentada (SKU ${SKU_PLETINA}) — ${est.pletina} un.`);
+  addLine(`Conector a tierra (SKU ${SKU_TIERRA}) — ${est.tierra} un.`);
+
+  doc.save('listado-tecnored-solar.pdf');
+}
  
 function Resultado({ kw, subElegida, form, stringsCantidad, contacto, setContacto, descargado, cotizado, enviando, onDescargar, onCotizar, onVolver }) {
   const paneles = panelesPara(kw, subElegida);
   const est = calcularEstructura(paneles, stringsCantidad);
   const suj = sujecionInfo(form.techo, form.instalacion);
   const inv = INVERSORES[kw];
+   const [errorContacto, setErrorContacto] = useState(false);
+  function handleDescargar() {
+    if (!contacto.nombre || !contacto.telefono || !contacto.correo) { setErrorContacto(true); return; }
+    setErrorContacto(false);
+    generarPDF({ kw, subElegida, form, est, paneles, contacto });
+    onDescargar();
+  }
  
   const rielRows = Object.entries(est.rieles).sort((a, b) => b[0] - a[0]).map(([largo, cant]) => (
     <div className="m-row" key={largo}><span>Riel Aluminio 35mm {Math.round(largo * 1000)}mm <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {SKU_RIEL[largo]})</span></span><span className="qty">{cant} un.</span></div>
@@ -550,7 +607,8 @@ function Resultado({ kw, subElegida, form, stringsCantidad, contacto, setContact
             <div className="field"><label>Teléfono</label><input value={contacto.telefono} onChange={(e) => setContacto({ ...contacto, telefono: e.target.value })} placeholder="+56 9 ..." /></div>
             <div className="field"><label>Correo</label><input type="email" value={contacto.correo} onChange={(e) => setContacto({ ...contacto, correo: e.target.value })} placeholder="tu@correo.cl" /></div>
           </div>
-          <button className="btn btn-primary" disabled={enviando} onClick={onDescargar}>{enviando ? 'Guardando...' : 'Descargar listado'}</button>
+                 <button className="btn btn-primary" disabled={enviando} onClick={handleDescargar}>{enviando ? 'Guardando...' : 'Descargar listado'}</button>
+          {errorContacto && <div style={{ color: '#C94E1E', fontSize: '13.5px', marginTop: '8px' }}>Completa nombre, teléfono y correo para descargar.</div>}
         </div>
       )}
       {descargado && <div className="success">Listo — tu listado quedó registrado. Nuestro equipo también quedó notificado.</div>}
