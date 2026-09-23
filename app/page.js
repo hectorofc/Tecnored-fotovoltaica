@@ -10,6 +10,71 @@ const TIERS = [3, 5, 8];
 const RATIOS = { lowcost: 0.85, equilibrio: 1.05, retorno: 1.2 };
  
 const ANCHO_PANEL = 1.134, ORILLA = 0.15;
+const ALTO_PANEL = 2.279;
+// Completar los SKU pendientes aquí: la pantalla y el PDF usan esta misma lista.
+const MATERIALES_ADICIONALES = [
+  { nombre: 'Cable solar rojo', sku: '' },
+  { nombre: 'Cable solar negro', sku: '' },
+  { nombre: 'Cable desnudo 6 AWG', sku: '' },
+  { nombre: 'Cable EVA verde 6 mm²', sku: '' },
+  { nombre: 'Cable EVA rojo 6 mm²', sku: '' },
+  { nombre: 'Cable EVA blanco 6 mm²', sku: '' },
+  { nombre: 'Conectores MC4', sku: '' },
+  { nombre: 'Prensaestopa PG13', sku: '' },
+  { nombre: 'Caja galvanizada lisa 100 × 100', sku: '' },
+  { nombre: 'Tubería galvanizada 25 mm', sku: '' },
+  { nombre: 'Flexible metálico libre de halógenos con filtro UV', sku: '' },
+  { nombre: 'Terminal recto', sku: '' },
+  { nombre: 'Terminal de tubería a flexible', sku: '' },
+  { nombre: 'Cámara de registro 160', sku: '' },
+  { nombre: 'Barra de tierra con prensa', sku: '' },
+  { nombre: 'Barra de distribución 2 × 7', sku: '' },
+  { nombre: 'Barra de distribución 1 × 12 verde', sku: '' },
+  { nombre: 'Tablero estanco 12 módulos', sku: '' },
+  { nombre: 'Protección omnipolar (definir capacidad según proyecto)', sku: '' },
+  { nombre: 'Protección diferencial tipo A 2 × 40 × 100 mA', sku: '' },
+  { nombre: 'Amarras plásticas', sku: '' },
+];
+const ACCESORIOS_BATERIAS = [
+  { nombre: 'Portafusible con fusible CAR 32 V 100 A', sku: '4703137' },
+  { nombre: 'Cable UTP Cat. 6, 3 m', sku: '' },
+  { nombre: 'Conductor Cu BL XLPE-PVC 1 × 25 mm² Extraflex', sku: '2205035' },
+  { nombre: 'Terminales de compresión ojo 25 mm²', sku: '1701300' },
+];
+
+function materialesAdicionales(sistema) {
+  return sistema === 'ongrid' ? MATERIALES_ADICIONALES : [...MATERIALES_ADICIONALES, ...ACCESORIOS_BATERIAS];
+}
+
+const MENSAJE_INVERSOR_HIBRIDO = 'Tu kit OnGrid incluye un inversor híbrido: puedes agregar una batería compatible en el futuro. Esta opción se entrega sin batería.';
+
+function modulosPoderPara(baterias) {
+  return Math.ceil(baterias / 4);
+}
+
+function equiposComplementarios(sistema, kw) {
+  const baterias = kw === 8 ? 2 : 1;
+  if (sistema === 'ongrid') return [{ nombre: 'Smart Power Sensor Huawei', sku: '4703176', cantidad: 1 }];
+  if (sistema === 'hibrido') return [
+    { nombre: 'Módulo de poder batería LUNA2000 Huawei', sku: '4701028', cantidad: modulosPoderPara(baterias) },
+    { nombre: 'Módulo de batería de litio 5 kWh Huawei LUNA2000', sku: '4701029', cantidad: baterias },
+    { nombre: 'SmartGuard-63A-S0 Huawei', sku: '4703178', cantidad: 1 },
+  ];
+  return [{ nombre: 'Banco de baterías', sku: '', cantidad: null }];
+}
+
+function formatoNumero(valor) {
+  return Number(valor).toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function estadoSuperficie(requerida, valorDisponible) {
+  if (String(valorDisponible ?? '').trim() === '') return { tipo: 'sin-dato', texto: 'No se indicó la superficie disponible.' };
+  const disponible = Number(valorDisponible);
+  if (!Number.isFinite(disponible) || disponible <= 0) return { tipo: 'insuficiente', texto: 'Ingresa una superficie disponible mayor que 0 m².' };
+  return disponible >= requerida
+    ? { tipo: 'suficiente', texto: `Alcanza por superficie: ${formatoNumero(disponible)} m² disponibles.` }
+    : { tipo: 'insuficiente', texto: `Superficie insuficiente: ${formatoNumero(disponible)} m² disponibles; faltan ${formatoNumero(Math.ceil((requerida - disponible) * 100 - 1e-8) / 100)} m².` };
+}
 const LARGOS_RIEL = [5.2, 4.2, 3.4, 2.1];
 const SKU_RIEL = { 5.2: '4703156', 4.2: '4703063', 3.4: '4703062', 2.1: '4703061' };
 const SKU_UNION_RIEL = '4703064';
@@ -19,9 +84,9 @@ const SKU_PLETINA = '7406584';
 const SKU_TIERRA = '4703070';
 const SKU_PANEL = '4707132';
 const INVERSORES = {
-  3: { sku: '4701022', nombre: 'Inversor Ongrid Huawei Monofásico 3kW' },
-  5: { sku: '4701023', nombre: 'Inversor Ongrid Huawei Monofásico 5kW' },
-  8: { sku: '4701024', nombre: 'Inversor Hibrido Huawei Monofásico 8kW' },
+  3: { sku: '4701022', nombre: 'Inversor híbrido Huawei monofásico 3 kW' },
+  5: { sku: '4701023', nombre: 'Inversor híbrido Huawei monofásico 5 kW' },
+  8: { sku: '4701024', nombre: 'Inversor híbrido Huawei monofásico 8 kW' },
   6.2: { sku: null, nombre: 'Inversor OffGrid 6,2kW' },
 };
  
@@ -36,6 +101,7 @@ function sujecionInfo(techo, instalacion) {
 }
  
 function repartirPaneles(paneles, strings) {
+  strings = Math.max(1, Math.min(paneles, Math.trunc(Number(strings)) || 1));
   const base = Math.floor(paneles / strings), resto = paneles % strings;
   return Array.from({ length: strings }, (_, i) => base + (i < resto ? 1 : 0)).filter((n) => n > 0);
 }
@@ -74,14 +140,17 @@ function calcularEstructura(totalPaneles, strings) {
     const c = combinarRiel(largoTramo);
     Object.entries(c.combo).forEach(([largo, cant]) => { rieles[largo] = (rieles[largo] || 0) + cant * 2; });
     uniones_riel += Math.max(0, c.piezas - 1) * 2;
-    detallePorString.push({ paneles: n, largoTramo: +largoTramo.toFixed(2), combo: c.combo, sobrante: +c.sobrante.toFixed(2) });
+    const largoRiel = Object.entries(c.combo).reduce((total, [largo, cantidad]) => total + Number(largo) * cantidad, 0);
+    detallePorString.push({ paneles: n, largoTramo: +largoTramo.toFixed(2), largoRiel, area: largoRiel * ALTO_PANEL, combo: c.combo, sobrante: +c.sobrante.toFixed(2) });
     sujecion += n * 2;
     union_paneles += (n - 1) * 2;
     union_ultimo += 4;
     pletina += n - 1;
     tierra += 1;
   });
-  return { reparto, mt_riel_total: +mt_riel_total.toFixed(2), rieles, uniones_riel, sujecion, union_paneles, union_ultimo, pletina, tierra, detallePorString };
+  const superficieMinima = Math.ceil(detallePorString.reduce((total, fila) => total + fila.area, 0) * 100 - 1e-8) / 100;
+  const metrosRielCompra = Object.entries(rieles).reduce((total, [largo, cantidad]) => total + Number(largo) * cantidad, 0);
+  return { reparto, mt_riel_total: +mt_riel_total.toFixed(2), metrosRielCompra, superficieMinima, rieles, uniones_riel, sujecion, union_paneles, union_ultimo, pletina, tierra, detallePorString };
 }
  
 function calcIdealKW(consumoMensual) {
@@ -273,7 +342,7 @@ export default function Home() {
                   <option value="" disabled>Escoja el tipo de techo</option>
                   <option value="metalica_zinc">Metálica / Zinc</option>
                   <option value="teja_asfaltica">Teja Asfáltica</option>
-                  <option value="teja_colonia_hormigon">Teja colonia / Hormigón</option>
+                  <option value="teja_colonia_hormigon">Teja colonial / Hormigón</option>
                   <option value="piso">Instalar en piso</option>
                 </select>
               </div>
@@ -309,7 +378,7 @@ export default function Home() {
               <div className="field">
                 <label>¿Almacenamiento de energía?</label>
                 <select value={form.sistema} onChange={(e) => upd('sistema', e.target.value)}>
-                  <option value="ongrid">Sin almacenamiento (OnGrid)</option>
+                  <option value="ongrid">Sin batería por ahora (OnGrid con inversor híbrido)</option>
                   <option value="hibrido">Con almacenamiento (Híbrido)</option>
                   <option value="offgrid">Solo con baterías, sin red (OffGrid)</option>
                 </select>
@@ -324,6 +393,7 @@ export default function Home() {
                 </div>
               )}
             </div>
+            {form.sistema === 'ongrid' && <div className="hybrid-note"><strong>Preparado para sumar batería a futuro</strong><p>{MENSAJE_INVERSOR_HIBRIDO}</p></div>}
             <div className="actions">
               <button className="btn btn-ghost" onClick={() => setScreen(0)}>Volver</button>
               <button className="btn btn-primary" onClick={avanzarAPropuestas}>Ver propuestas</button>
@@ -337,6 +407,7 @@ export default function Home() {
             <div className="eyebrow">Paso 3 de 4</div>
             <h1 className="title">Estas son tus <em>propuestas de tamaño</em></h1>
             <p className="lead">Calculado a partir de tu consumo de {form.consumo || 0} kWh/mes. Elige la que más te acomode.</p>
+            {form.sistema === 'ongrid' && <div className="hybrid-note"><strong>Inversor híbrido incluido en todas estas opciones</strong><p>{MENSAJE_INVERSOR_HIBRIDO}</p></div>}
  
             <div className={opciones.tipo === 'unica' ? 'options' : 'options-grid'}>
               {opciones.tipo === 'unica' && (
@@ -383,6 +454,7 @@ export default function Home() {
               ].map((d) => {
                 const paneles = panelesPara(planElegido, d.key);
                 const potencia = ((paneles * PANEL_W) / 1000).toFixed(2);
+                const estructuraPrevia = calcularEstructura(paneles, 2);
                 return (
                   <div key={d.key} className="opt" onClick={() => { setSubElegida(d.key); setScreen(4); }}>
                     <div className="opt-top">
@@ -391,6 +463,7 @@ export default function Home() {
                     </div>
                     <div className="opt-desc">{d.desc}</div>
                     <div className="badge">{potencia} kW en paneles · inversor de {planElegido} kW</div>
+                    <SuperficieTecho est={estructuraPrevia} disponible={form.m2} preliminar />
                   </div>
                 );
               })}
@@ -465,6 +538,21 @@ export default function Home() {
   );
 }
  
+function SuperficieTecho({ est, disponible, preliminar = false }) {
+  const estado = estadoSuperficie(est.superficieMinima, disponible);
+  return (
+    <div className={`roof-area ${estado.tipo}`}>
+      <strong>Superficie mínima estimada: {formatoNumero(est.superficieMinima)} m²</strong>
+      <div>{estado.texto}</div>
+      {preliminar ? <small>Estimación con 2 filas; se actualiza al elegir la cantidad de strings.</small> : <>
+        {est.detallePorString.map((fila, i) => <small key={i}>Fila {i + 1}: {formatoNumero(fila.largoRiel)} m × 2,279 m = {formatoNumero(fila.area)} m²</small>)}
+        <small>Área calculada con el largo completo de los rieles propuestos, incluido el sobrante. El total se redondea hacia arriba a dos decimales.</small>
+      </>}
+      <small>Supone una fila física por string. No incluye pasillos ni separación entre filas; confirma la distribución y las dimensiones del techo.</small>
+    </div>
+  );
+}
+
 function OptCard({ kw, tag, desc, cov, onClick }) {
   const covClass = cov >= 95 ? 'cov-high' : cov >= 60 ? 'cov-mid' : '';
   return (
@@ -524,20 +612,41 @@ function generarPDF({ kw, subElegida, form, est, paneles, contacto }) {
   doc.setFontSize(11);
   doc.text(`Planta ${kw} kW — Configuración: ${subElegida}`, 14, y); y += 8;
 
-  const addLine = (text) => { doc.setFontSize(10); doc.text(text, 14, y); y += 6; if (y > 280) { doc.addPage(); y = 20; } };
-  const addCat = (text) => { y += 2; doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.text(text, 14, y); doc.setFont(undefined, 'normal'); y += 7; };
+  const addLine = (text) => {
+    doc.setFontSize(10);
+    const lineas = doc.splitTextToSize(text, 182);
+    lineas.forEach((linea) => {
+      if (y > 278) { doc.addPage(); y = 20; }
+      doc.text(linea, 14, y); y += 6;
+    });
+  };
+  const addCat = (text) => {
+    if (y > 262) { doc.addPage(); y = 20; }
+    y += 2; doc.setFontSize(11); doc.setFont(undefined, 'bold');
+    doc.text(text, 14, y); doc.setFont(undefined, 'normal'); y += 7;
+  };
 
   addCat('Paneles');
   addLine(`Panel ZN Shine 580W (SKU ${SKU_PANEL}) — ${paneles} un.`);
+  addLine(`Superficie mínima estimada: ${formatoNumero(est.superficieMinima)} m²`);
+  addLine(estadoSuperficie(est.superficieMinima, form.m2).texto);
+  est.detallePorString.forEach((fila, i) => addLine(`Fila ${i + 1}: ${formatoNumero(fila.largoRiel)} m × 2,279 m = ${formatoNumero(fila.area)} m²`));
+  addLine('Área con rieles completos, incluido el sobrante, y una fila por string. Total redondeado hacia arriba a dos decimales. No incluye pasillos ni separación entre filas; confirmar distribución y dimensiones del techo.');
 
   addCat('Inversores');
   const inv = INVERSORES[kw];
   addLine(`${inv.nombre}${inv.sku ? ' (SKU ' + inv.sku + ')' : ' (SKU pendiente)'} — 1 un.`);
-
-  if (form.sistema !== 'ongrid') {
-    addCat('Almacenamiento');
-    addLine('Banco de baterías — A definir');
+  if (form.sistema === 'ongrid') {
+    doc.setFont(undefined, 'bold');
+    addLine('Preparado para sumar batería a futuro');
+    doc.setFont(undefined, 'normal');
+    addLine(MENSAJE_INVERSOR_HIBRIDO);
   }
+
+  if (form.sistema !== 'ongrid') addCat('Almacenamiento y respaldo');
+  equiposComplementarios(form.sistema, kw).forEach((equipo) => {
+    addLine(`${equipo.nombre}${equipo.sku ? ' (SKU ' + equipo.sku + ')' : ' (SKU pendiente)'} — ${equipo.cantidad === null ? 'A definir' : equipo.cantidad + ' un.'}`);
+  });
 
   addCat('Estructura');
   Object.entries(est.rieles).sort((a, b) => b[0] - a[0]).forEach(([largo, cant]) => {
@@ -557,6 +666,12 @@ function generarPDF({ kw, subElegida, form, est, paneles, contacto }) {
   addLine(`Conector terminal módulo (SKU ${SKU_UNION_ULTIMO}) — ${est.union_ultimo} un.`);
   addLine(`Pletina dentada (SKU ${SKU_PLETINA}) — ${est.pletina} un.`);
   addLine(`Conector a tierra (SKU ${SKU_TIERRA}) — ${est.tierra} un.`);
+
+  addCat('No olvides considerar');
+  addLine('Materiales adicionales: cantidades y especificaciones a definir según cada proyecto.');
+  materialesAdicionales(form.sistema).forEach((material) => {
+    addLine(`${material.nombre} (SKU ${material.sku || 'pendiente'})`);
+  });
 
   doc.save('listado-tecnored-solar.pdf');
 }
@@ -609,16 +724,19 @@ function Resultado({ kw, subElegida, form, stringsCantidad, contacto, setContact
       <div className="materials">
         <div className="m-cat">Paneles</div>
         <div className="m-row"><span>Panel ZN Shine 580W <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {SKU_PANEL})</span></span><span className="qty">{paneles} un.</span></div>
+        <SuperficieTecho est={est} disponible={form.m2} />
  
         <div className="m-cat">Inversores</div>
         <div className="m-row"><span>{inv.nombre}{inv.sku ? <span style={{ color: 'var(--slate)', fontWeight: 400 }}> (SKU {inv.sku})</span> : <span style={{ color: 'var(--slate)', fontWeight: 400 }}> (SKU pendiente de definir)</span>}</span><span className="qty">1 un.</span></div>
+        {form.sistema === 'ongrid' && <div className="hybrid-note"><strong>Preparado para sumar batería a futuro</strong><p>{MENSAJE_INVERSOR_HIBRIDO}</p></div>}
  
-        {form.sistema !== 'ongrid' && (
-          <>
-            <div className="m-cat">Almacenamiento</div>
-            <div className="m-row"><span>Banco de baterías</span><span className="qty">A definir</span></div>
-          </>
-        )}
+        {form.sistema !== 'ongrid' && <div className="m-cat">Almacenamiento y respaldo</div>}
+        {equiposComplementarios(form.sistema, kw).map((equipo) => (
+          <div className="m-row" key={equipo.sku || equipo.nombre}>
+            <span>{equipo.nombre} <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {equipo.sku || 'pendiente'})</span></span>
+            <span className="qty">{equipo.cantidad === null ? 'A definir' : `${equipo.cantidad} un.`}</span>
+          </div>
+        ))}
  
         <div className="m-cat">Estructura</div>
         <div className="m-note" style={{ paddingTop: 0 }}>Propuesta de riel por string (cada string lleva 2 rieles iguales):</div>
@@ -628,7 +746,7 @@ function Resultado({ kw, subElegida, form, stringsCantidad, contacto, setContact
             <span className="qty" style={{ textAlign: 'right' }}>{Object.entries(d.combo).sort((a, b) => b[0] - a[0]).map(([l, c]) => `${c}× ${l}m`).join(' + ')}</span>
           </div>
         ))}
-        <div className="m-note">Total a comprar ({est.mt_riel_total} mt en riel):</div>
+        <div className="m-note">Total a comprar ({formatoNumero(est.metrosRielCompra)} m en riel):</div>
         {rielRows}
         {est.uniones_riel > 0 && <div className="m-row"><span>Unión riel de aluminio <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {SKU_UNION_RIEL})</span></span><span className="qty">{est.uniones_riel} un.</span></div>}
         {sujecionRows}
@@ -639,6 +757,16 @@ function Resultado({ kw, subElegida, form, stringsCantidad, contacto, setContact
         <div className="m-note">* La combinación de rieles es una propuesta — revisa el stock de todas las dimensiones antes de confirmar. Cantidades sujetas al catálogo real de Tecnored.</div>
       </div>
  
+      <div className="materials">
+        <div className="m-cat">No olvides considerar</div>
+        <p className="m-note">Materiales adicionales: cantidades y especificaciones a definir según cada proyecto.</p>
+        {materialesAdicionales(form.sistema).map((material) => (
+          <div className="m-row" key={material.nombre}>
+            <span>{material.nombre} <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {material.sku || 'pendiente'})</span></span>
+          </div>
+        ))}
+      </div>
+
       <hr className="divider" />
  
       {!descargado && (
@@ -711,7 +839,19 @@ p.lead{color:var(--slate); font-size:15px; line-height:1.5; margin:0 0 26px; max
 .options-grid .opt-top{flex-direction:column; align-items:flex-start; gap:2px;}
 .options-grid .opt-kw{font-size:32px;}
 .options{display:flex; flex-direction:column; gap:12px; margin-bottom:22px;}
-.options .opt{display:flex; align-items:center; gap:18px; padding:16px 18px;}
+.options .opt{display:flex; align-items:center; gap:18px; padding:16px 18px; flex-wrap:wrap;}
+.roof-area{flex-basis:100%; padding:14px 16px; margin:10px 0; border:1px solid var(--line); border-radius:8px; background:#FAF8F4; font-size:13px; line-height:1.5;}
+.materials > .roof-area{margin:12px 18px;}
+.roof-area strong,.roof-area small{display:block;}
+.roof-area small{margin-top:5px; color:var(--slate);}
+.roof-area.suficiente{border-color:#BFE1C7; background:#EEF7F0;}
+.roof-area.insuficiente{border-color:#E6BC9A; background:#FFF3E8;}
+.hybrid-note{background:#FFF7D6; border-left:4px solid var(--sun); border-radius:8px; padding:14px 16px; margin:14px 0; font-size:14px; line-height:1.5;}
+.hybrid-note strong{display:block;}
+.hybrid-note p{margin:5px 0 0;}
+.materials > .hybrid-note{margin:12px 18px;}
+.m-row{gap:14px;}
+.m-row .qty{flex-shrink:0;}
 .options .opt-top{flex-direction:column; align-items:flex-start; gap:2px; min-width:110px;}
 .options .opt-desc{margin-top:0; flex:1;}
 .options .opt .badge{margin-top:0; white-space:nowrap;}
