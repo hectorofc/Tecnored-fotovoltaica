@@ -208,8 +208,31 @@ export default function Home() {
     }
   }
 
-  async function onCotizar() { await guardar({ quiere_cotizar: true }); await notificarTelegram(); setCotizado(true); }
-  async function onSolicitarContactoGrande() { await guardar({ quiere_cotizar: true }); await notificarTelegram(); setCotizado(true); }
+  function validarContactoCotizacion() {
+    if (!contacto.nombre.trim() || !contacto.telefono.trim() || !contacto.correo.trim()) {
+      window.alert('Completa nombre, teléfono y correo para solicitar una cotización.');
+      return false;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contacto.correo.trim())) {
+      window.alert('Ingresa un correo válido, por ejemplo: nombre@correo.cl');
+      return false;
+    }
+    return true;
+  }
+
+  async function onCotizar() {
+    if (!validarContactoCotizacion()) return;
+    await guardar({ quiere_cotizar: true });
+    await notificarTelegram();
+    setCotizado(true);
+  }
+
+  async function onSolicitarContactoGrande() {
+    if (!validarContactoCotizacion()) return;
+    await guardar({ quiere_cotizar: true });
+    await notificarTelegram();
+    setCotizado(true);
+  }
  
   const stepIndex = typeof screen === 'number' ? Math.min(screen, 4) : 4;
  
