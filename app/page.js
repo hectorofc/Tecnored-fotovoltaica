@@ -743,22 +743,6 @@ function Resultado({ kw, subElegida, form, stringsCantidad, contacto, setContact
     onDescargar();
   }
  
-  const rielRows = Object.entries(est.rieles).sort((a, b) => b[0] - a[0]).map(([largo, cant]) => (
-    <div className="m-row" key={largo}><span>Riel Aluminio 35mm {Math.round(largo * 1000)}mm <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {SKU_RIEL[largo]})</span></span><span className="qty">{cant} un.</span></div>
-  ));
- 
-  let sujecionRows;
-  if (suj.tipo === 'doble') {
-    sujecionRows = (
-      <>
-        <div className="m-row"><span>{suj.nombreA} <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {suj.skuA})</span></span><span className="qty">{Math.round(est.sujecion / 2)} un.</span></div>
-        <div className="m-row"><span>{suj.nombreB} <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {suj.skuB})</span></span><span className="qty">{Math.round(est.sujecion / 2)} un.</span></div>
-      </>
-    );
-  } else if (suj.tipo === 'simple') {
-    sujecionRows = <div className="m-row"><span>{suj.nombre} <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {suj.sku})</span></span><span className="qty">{est.sujecion} un.</span></div>;
-  } else {
-    sujecionRows = <div className="m-row"><span>{suj.nombre}</span><span className="qty">{est.sujecion} un.</span></div>;
   const listado = listadoMateriales({ kw, subElegida, form, stringsCantidad });
   const todasLasFilas = [...listado.principales, ...listado.adicionales];
   const [mensajeCopia, setMensajeCopia] = useState('');
@@ -776,7 +760,6 @@ function Resultado({ kw, subElegida, form, stringsCantidad, contacto, setContact
       setMensajeCopia('No se pudo copiar automáticamente. Selecciona el texto de abajo y cópialo con Ctrl+C o con la opción Copiar de tu dispositivo.');
     }
   }
- 
 
   return (
     <>
@@ -792,51 +775,6 @@ function Resultado({ kw, subElegida, form, stringsCantidad, contacto, setContact
         <div><div className="num">{coberturaPct(kw, form.consumo)}%</div><div className="lbl">Cobertura consumo</div></div>
       </div>
  
-      <div className="materials">
-        <div className="m-cat">Paneles</div>
-        <div className="m-row"><span>Panel ZN Shine 580W <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {SKU_PANEL})</span></span><span className="qty">{paneles} un.</span></div>
-        <SuperficieTecho est={est} disponible={form.m2} />
- 
-        <div className="m-cat">Inversores</div>
-        <div className="m-row"><span>{inv.nombre}{inv.sku ? <span style={{ color: 'var(--slate)', fontWeight: 400 }}> (SKU {inv.sku})</span> : <span style={{ color: 'var(--slate)', fontWeight: 400 }}> (SKU pendiente de definir)</span>}</span><span className="qty">1 un.</span></div>
-        {form.sistema === 'ongrid' && <div className="hybrid-note"><strong>Preparado para sumar batería a futuro</strong><p>{MENSAJE_INVERSOR_HIBRIDO}</p></div>}
- 
-        {form.sistema !== 'ongrid' && <div className="m-cat">Almacenamiento y respaldo</div>}
-        {equiposComplementarios(form.sistema, kw).map((equipo) => (
-          <div className="m-row" key={equipo.sku || equipo.nombre}>
-            <span>{equipo.nombre} <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {equipo.sku || 'pendiente'})</span></span>
-            <span className="qty">{equipo.cantidad === null ? 'A definir' : `${equipo.cantidad} un.`}</span>
-          </div>
-        ))}
- 
-        <div className="m-cat">Estructura</div>
-        <div className="m-note" style={{ paddingTop: 0 }}>Propuesta de riel por string (cada string lleva 2 rieles iguales):</div>
-        {est.detallePorString.map((d, i) => (
-          <div className="m-row" style={{ fontSize: '13.5px' }} key={i}>
-            <span>String {i + 1} — {d.paneles} paneles ({d.largoTramo}mt por riel)</span>
-            <span className="qty" style={{ textAlign: 'right' }}>{Object.entries(d.combo).sort((a, b) => b[0] - a[0]).map(([l, c]) => `${c}× ${l}m`).join(' + ')}</span>
-          </div>
-        ))}
-        <div className="m-note">Total a comprar ({formatoNumero(est.metrosRielCompra)} m en riel):</div>
-        {rielRows}
-        {est.uniones_riel > 0 && <div className="m-row"><span>Unión riel de aluminio <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {SKU_UNION_RIEL})</span></span><span className="qty">{est.uniones_riel} un.</span></div>}
-        {sujecionRows}
-        <div className="m-row"><span>Conector unión módulo 30mm <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {SKU_UNION_PANELES})</span></span><span className="qty">{est.union_paneles} un.</span></div>
-        <div className="m-row"><span>Conector terminal módulo 30mm <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {SKU_UNION_ULTIMO})</span></span><span className="qty">{est.union_ultimo} un.</span></div>
-        <div className="m-row"><span>Pletina dentada bajada a tierra <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {SKU_PLETINA})</span></span><span className="qty">{est.pletina} un.</span></div>
-        <div className="m-row"><span>Conector a tierra estructura solar <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {SKU_TIERRA})</span></span><span className="qty">{est.tierra} un.</span></div>
-        <div className="m-note">* La combinación de rieles es una propuesta — revisa el stock de todas las dimensiones antes de confirmar. Cantidades sujetas al catálogo real de Tecnored.</div>
-      </div>
- 
-      <div className="materials">
-        <div className="m-cat">No olvides considerar</div>
-        <p className="m-note">Materiales adicionales: cantidades y especificaciones a definir según cada proyecto.</p>
-        {materialesAdicionales(form.sistema).map((material) => (
-          <div className="m-row" key={material.nombre}>
-            <span>{material.nombre} <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {material.sku || 'pendiente'})</span></span>
-          </div>
-        ))}
-      </div>
       <SuperficieTecho est={est} disponible={form.m2} />
       {form.sistema === 'ongrid' && <div className="hybrid-note"><strong>Preparado para sumar batería a futuro</strong><p>{MENSAJE_INVERSOR_HIBRIDO}</p></div>}
 
