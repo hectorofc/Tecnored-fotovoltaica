@@ -188,8 +188,28 @@ export default function Home() {
   }
  
   async function onDescargar() { await guardar({}); setDescargado(true); }
-  async function onCotizar() { await guardar({ quiere_cotizar: true }); setCotizado(true); }
-  async function onSolicitarContactoGrande() { await guardar({ quiere_cotizar: true }); setCotizado(true); }
+
+  async function notificarTelegram() {
+    try {
+      await fetch('/api/notificar-telegram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: contacto.nombre,
+          telefono: contacto.telefono,
+          correo: contacto.correo,
+          direccion: form.direccion,
+          kw: planElegido,
+          paneles: planElegido && subElegida ? panelesPara(planElegido, subElegida) : null,
+        }),
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function onCotizar() { await guardar({ quiere_cotizar: true }); await notificarTelegram(); setCotizado(true); }
+  async function onSolicitarContactoGrande() { await guardar({ quiere_cotizar: true }); await notificarTelegram(); setCotizado(true); }
  
   const stepIndex = typeof screen === 'number' ? Math.min(screen, 4) : 4;
  
