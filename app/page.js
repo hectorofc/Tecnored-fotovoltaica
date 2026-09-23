@@ -181,6 +181,44 @@ function panelesPara(tierKW, key) {
   return equilibrio;
 }
  
+function listadoMateriales({ kw, subElegida, form, stringsCantidad }) {
+  const paneles = panelesPara(kw, subElegida);
+  const est = calcularEstructura(paneles, stringsCantidad);
+  const inv = INVERSORES[kw];
+  const suj = sujecionInfo(form.techo, form.instalacion);
+  const filas = [
+    { sku: SKU_PANEL, nombre: 'Panel ZN Shine 580 W', cantidad: paneles },
+    { ...inv, cantidad: 1 },
+    ...equiposComplementarios(form.sistema, kw),
+    ...Object.entries(est.rieles).sort((a, b) => b[0] - a[0]).map(([largo, cantidad]) => ({
+      sku: SKU_RIEL[largo], nombre: `Riel aluminio 35 mm ${Math.round(Number(largo) * 1000)} mm`, cantidad,
+    })),
+  ];
+  if (est.uniones_riel > 0) filas.push({ sku: SKU_UNION_RIEL, nombre: 'Unión riel de aluminio', cantidad: est.uniones_riel });
+  if (suj.tipo === 'doble') {
+    filas.push({ sku: suj.skuA, nombre: suj.nombreA, cantidad: Math.round(est.sujecion / 2) });
+    filas.push({ sku: suj.skuB, nombre: suj.nombreB, cantidad: Math.round(est.sujecion / 2) });
+  } else {
+    filas.push({ sku: suj.sku || '', nombre: suj.nombre, cantidad: est.sujecion });
+  }
+  filas.push(
+    { sku: SKU_UNION_PANELES, nombre: 'Conector unión módulo 30 mm', cantidad: est.union_paneles },
+    { sku: SKU_UNION_ULTIMO, nombre: 'Conector terminal módulo 30 mm', cantidad: est.union_ultimo },
+    { sku: SKU_PLETINA, nombre: 'Pletina dentada bajada a tierra', cantidad: est.pletina },
+    { sku: SKU_TIERRA, nombre: 'Conector a tierra estructura solar', cantidad: est.tierra },
+  );
+  return {
+    principales: filas,
+    adicionales: materialesAdicionales(form.sistema).map(material => ({ ...material, cantidad: null })),
+  };
+}
+
+function textoParaSAP(filas, incluirCantidades = false) {
+  return filas.filter(fila => String(fila.sku || '').trim()).map(fila =>
+    incluirCantidades ? `${fila.sku}\t${fila.cantidad ?? ''}` : String(fila.sku)
+  ).join('\r\n');
+}
+
 export default function Home() {
   const [screen, setScreen] = useState(0);
   const [form, setForm] = useState({
@@ -676,6 +714,22 @@ function generarPDF({ kw, subElegida, form, est, paneles, contacto }) {
   doc.save('listado-tecnored-solar.pdf');
 }
  
+function TablaMateriales({ titulo, filas, adicionales = false }) {
+  return (
+    <div className="materials table-wrap" tabIndex={0} role="region" aria-label={titulo}>
+      <table className="material-table">
+        <caption>{titulo}{adicionales && <small>Cantidades y especificaciones a definir según cada proyecto.</small>}</caption>
+        <thead><tr><th scope="col">SKU</th><th scope="col">Material</th><th scope="col">Cantidad</th></tr></thead>
+        <tbody>{filas.map((fila, i) => <tr key={fila.nombre + i}>
+          <td className="sku-cell">{fila.sku || <span className="pending-sku">Pendiente</span>}</td>
+          <td>{fila.nombre}</td>
+          <td className="quantity-cell">{fila.cantidad ?? 'A definir'}</td>
+        </tr>)}</tbody>
+      </table>
+    </div>
+  );
+}
+
 function Resultado({ kw, subElegida, form, stringsCantidad, contacto, setContacto, descargado, cotizado, enviando, onDescargar, onCotizar, onVolver }) {
   const paneles = panelesPara(kw, subElegida);
   const est = calcularEstructura(paneles, stringsCantidad);
@@ -705,8 +759,25 @@ function Resultado({ kw, subElegida, form, stringsCantidad, contacto, setContact
     sujecionRows = <div className="m-row"><span>{suj.nombre} <span style={{ color: 'var(--slate)', fontWeight: 400 }}>(SKU {suj.sku})</span></span><span className="qty">{est.sujecion} un.</span></div>;
   } else {
     sujecionRows = <div className="m-row"><span>{suj.nombre}</span><span className="qty">{est.sujecion} un.</span></div>;
+  const listado = listadoMateriales({ kw, subElegida, form, stringsCantidad });
+  const todasLasFilas = [...listado.principales, ...listado.adicionales];
+  const [mensajeCopia, setMensajeCopia] = useState('');
+  const [textoManual, setTextoManual] = useState('');
+
+  async function copiarParaSAP(incluirCantidades) {
+    const texto = textoParaSAP(todasLasFilas, incluirCantidades);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Portapapeles no disponible');
+      await navigator.clipboard.writeText(texto);
+      setTextoManual('');
+      setMensajeCopia(incluirCantidades ? 'SKU y cantidades copiados en dos columnas. Las cantidades a definir quedan vacías.' : 'SKU copiados: un código por línea, sin encabezados.');
+    } catch {
+      setTextoManual(texto);
+      setMensajeCopia('No se pudo copiar automáticamente. Selecciona el texto de abajo y cópialo con Ctrl+C o con la opción Copiar de tu dispositivo.');
+    }
   }
  
+
   return (
     <>
       <div className="eyebrow">Resultado</div>
@@ -766,6 +837,31 @@ function Resultado({ kw, subElegida, form, stringsCantidad, contacto, setContact
           </div>
         ))}
       </div>
+      <SuperficieTecho est={est} disponible={form.m2} />
+      {form.sistema === 'ongrid' && <div className="hybrid-note"><strong>Preparado para sumar batería a futuro</strong><p>{MENSAJE_INVERSOR_HIBRIDO}</p></div>}
+
+      <section className="sap-tools" aria-label="Copiar materiales para cotizar">
+        <h3>Copiar materiales para cotizar</h3>
+        <div className="copy-actions">
+          <button type="button" className="btn btn-primary" onClick={() => copiarParaSAP(false)}>Copiar todos los SKU</button>
+          <button type="button" className="btn btn-cta" onClick={() => copiarParaSAP(true)}>Copiar SKU y cantidades</button>
+        </div>
+        <p>Incluye los materiales adicionales con SKU. Los códigos pendientes no se copian. Las cantidades de accesorios quedan vacías para completarlas según el proyecto.</p>
+        <p>SKU: una columna. SKU y cantidades: dos columnas para pegar donde SAP permita carga tabular, o primero en Excel.</p>
+        <div role="status" aria-live="polite">{mensajeCopia}</div>
+        {textoManual && <textarea aria-label="Datos para copiar manualmente" readOnly value={textoManual} onFocus={(event) => event.target.select()} rows={8} />}
+      </section>
+
+      <TablaMateriales titulo="Materiales del kit" filas={listado.principales} />
+
+      <details className="structure-details">
+        <summary>Ver distribución y detalle de rieles</summary>
+        <p>Cada fila lleva 2 rieles iguales. Total a comprar: {formatoNumero(est.metrosRielCompra)} m de riel.</p>
+        {est.detallePorString.map((fila, i) => <p key={i}>Fila {i + 1}: {fila.paneles} paneles. Por riel: {Object.entries(fila.combo).sort((a,b) => b[0] - a[0]).map(([largo, cantidad]) => cantidad + ' × ' + largo + ' m').join(' + ')}.</p>)}
+        <p>Revisa el stock de todas las dimensiones antes de confirmar. Cantidades sujetas al catálogo real de Tecnored.</p>
+      </details>
+
+      <TablaMateriales titulo="No olvides considerar" filas={listado.adicionales} adicionales />
 
       <hr className="divider" />
  
@@ -795,6 +891,25 @@ function Resultado({ kw, subElegida, form, stringsCantidad, contacto, setContact
 }
  
 const CSS = `
+.materials.table-wrap{overflow-x:auto;}
+.material-table{width:100%; border-collapse:collapse; font-size:14px; text-align:left;}
+.material-table caption{text-align:left; padding:16px; font-weight:700; color:var(--ember); background:#FAF8F4;}
+.material-table caption small{display:block; color:var(--slate); font-weight:400; margin-top:6px;}
+.material-table th{background:#EFEAE2; padding:12px; font-size:12px;}
+.material-table td{padding:12px; border-top:1px solid var(--line); vertical-align:top;}
+.material-table tbody tr:nth-child(even){background:#FAF8F4;}
+.sku-cell{font-family:monospace; white-space:nowrap; user-select:text;}
+.quantity-cell{text-align:right; white-space:nowrap;}
+.pending-sku{color:var(--slate); font-family:inherit;}
+.sap-tools{padding:16px; background:#fff; border:1px solid var(--line); border-radius:12px; margin:18px 0;}
+.sap-tools h3{margin:0 0 12px; font-size:16px;}
+.sap-tools p,.sap-tools [role="status"]{font-size:13px; line-height:1.5; color:var(--slate);}
+.copy-actions{display:flex; gap:10px; flex-wrap:wrap;}
+.copy-actions .btn{flex:1 1 200px; width:auto; margin:0; font-size:14px;}
+.sap-tools textarea{width:100%; margin-top:12px; padding:10px; font-family:monospace;}
+.structure-details{font-size:13px; line-height:1.5; margin:14px 0 22px; color:var(--slate);}
+.structure-details summary{cursor:pointer; font-weight:600;}
+
 :root{
   --graphite:#2B2B2E; --stone:#F7F4EF; --card:#FFFFFF; --ember:#E8622C; --ember-dark:#C94E1E;
   --sun:#FFC72C; --slate:#6E6B66; --line:#E4E0D8; --good:#3E7A4C;
